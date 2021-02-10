@@ -8,12 +8,11 @@ from typing import Type, Tuple
 import numpy as np 
 
 import torch
-from torch.utils.data import Dataset, IterableDataset, DataLoader
+from torch.utils.data import Dataset, IterableDataset, DataLoader, WeightedRandomSampler
 
 import transformers
 from transformers import AdamW
 from transformers import RobertaForSequenceClassification, RobertaTokenizer, PretrainedConfig
-
 
 device = torch.device("cpu") #torch.device('cuda')
 
@@ -49,8 +48,35 @@ def train(dl: DataLoader, epochs: int = 1) -> Tuple[Type[torch.nn.Module], Type[
 
     return model, tokenizer
     
+def get_weighted_sampler(dataset: Dataset) -> WeightedRandomSampler:
+    # total number of positive instances
+    n = dataset.labels.shape[0]
+    n_pos = dataset.labels[dataset.labels>0].shape[0]
+    n_neg = n - n_pos
+
+    # split half the mass over the pos examples
+    pos_weight = 0.5 / n_pos 
+    neg_weight = 0.5 / n_neg 
+
+    sample_weights = neg_weight * torch.ones(n, dtype=torch.float)
+    pos_indices = np.argwhere(dataset.labels).squeeze()
+    sample_weights[pos_indices] = pos_weight
+
+    sampler = WeightedRandomSampler(
+        weights=sample_weights,
+        num_samples=n,
+        replacement=True)
+
+    return sampler 
+
 def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 16, epochs: int = 1) -> bool:
-    dl = DataLoader(sr_dataset, batch_size=batch_size)
+
+    # this is a sampler that assigns larger sampling weights to (rare) positive
+    # examples for batch construction, to account for data imbalance.
+    weighted_sampler = get_weighted_sampler(sr_dataset)
+    
+    # 
+    dl = DataLoader(sr_dataset, batch_size=batch_size, sampler=weighted_sampler)
     model, tokenizer = train(dl, epochs=epochs)
 
     out_path = os.path.join(WEIGHTS_PATH, uuid)
