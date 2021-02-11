@@ -30,14 +30,19 @@ def train(dl: DataLoader, epochs: int = 1) -> Tuple[Type[torch.nn.Module], Type[
     tokenizer = RobertaTokenizer.from_pretrained("allenai/biomed_roberta_base") 
     model     = RobertaForSequenceClassification.from_pretrained("allenai/biomed_roberta_base", 
                                                                  num_labels=2).to(device=device) 
+    #import pdb; pdb.set_trace()
+    for param in list(model.parameters())[-1:]:
+        param.requires_grad = False
+    
     optimizer = AdamW(model.parameters())
 
     best_val = np.inf
     for epoch in range(epochs):
         print(f"on epoch {epoch}.")
         model.train()
-
-        for (X, y) in dl:
+        running_losses = []
+        
+        for batch_num, (X, y) in enumerate(dl):
 
             optimizer.zero_grad()
 
@@ -50,6 +55,10 @@ def train(dl: DataLoader, epochs: int = 1) -> Tuple[Type[torch.nn.Module], Type[
                               labels=batch_y_tensor.to(device=device))
           
             model_outputs['loss'].backward()
+            running_losses.append(model_outputs['loss'].detach().float())
+            if batch_num % 10 == 0:
+                avg_loss = sum(running_losses[-10:])/len(running_losses[-10:])
+                print(f"avg loss for last 10 batches: {avg_loss}")
             optimizer.step()
 
     return model, tokenizer
@@ -59,8 +68,18 @@ def eval_model(val_data: DataLoader, model: Type[torch.nn.Module], tokenizer: Ty
     with torch.no_grad():
         model.eval()
         for (X, y) in val_data:
-            preds.extend(model(X))
+            
+            batch_X_tensor = tokenizer.batch_encode_plus(X, max_length=512, 
+                                                        add_special_tokens=True, 
+                                                        pad_to_max_length=True)
+            model_outputs = model(torch.tensor(batch_X_tensor['input_ids']).to(device=device), 
+                              attention_mask=torch.tensor(batch_X_tensor['attention_mask']).to(device=device))
+            import pdb; pdb.set_trace()
+            preds.extend(model_outputs['logits'].cpu().numpy().tolist())
+            #preds.extend(model_outputs)
             labels.extend(y)
+
+    import pdb; pdb.set_trace()
     return (preds, labels)
 
 
@@ -85,7 +104,7 @@ def get_weighted_sampler(dataset: Dataset) -> WeightedRandomSampler:
 
     return sampler 
 
-def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 16, 
+def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 8, 
                     epochs: int = 1, val_dataset: Dataset = None) -> bool:
     '''
     Trains a classification model on the given review dataset and dumps
@@ -103,7 +122,6 @@ def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 16,
     if val_dataset is not None: 
         val_dl = DataLoader(val_dataset, batch_size=batch_size)
         preds, labels = eval_model(val_dl, model, tokenizer)
-        import pdb; pdb.set_trace()
 
 
     out_path = os.path.join(WEIGHTS_PATH, uuid)
