@@ -5,10 +5,8 @@ import pandas as pd
 import screening_model
 from screening_model import SRDataset
 
-
 import torch
 from torch.utils.data import IterableDataset, DataLoader
-
 
 def train_from_csv(review_path="example-datasets/labels_73.csv") -> None:
     df = pd.read_csv(review_path)

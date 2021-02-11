@@ -1,5 +1,8 @@
 '''
 RobotScreener
+
+Simple module for consuming labeled abstract screening data, training
+a model on the basis of this, and dumping it to disk.
 '''
 import os 
 
@@ -14,13 +17,16 @@ import transformers
 from transformers import AdamW
 from transformers import RobertaForSequenceClassification, RobertaTokenizer, PretrainedConfig
 
-device = torch.device("cpu") #torch.device('cuda')
-
-WEIGHTS_PATH = "saved_model_weights"
+###
+# Globals; need to be edited for server.
+import config
+device = torch.device(config.device_str)
+WEIGHTS_PATH = config.weights_path_str
+###
 
 def train(dl: DataLoader, epochs: int = 1) -> Tuple[Type[torch.nn.Module], Type[transformers.PreTrainedTokenizer]]:
 
-    ''' model and optimizer ''' 
+    ''' Model and optimizer ''' 
     tokenizer = RobertaTokenizer.from_pretrained("allenai/biomed_roberta_base") 
     model     = RobertaForSequenceClassification.from_pretrained("allenai/biomed_roberta_base", 
                                                                  num_labels=2).to(device=device) 
@@ -32,6 +38,7 @@ def train(dl: DataLoader, epochs: int = 1) -> Tuple[Type[torch.nn.Module], Type[
         model.train()
 
         for (X, y) in dl:
+
             optimizer.zero_grad()
 
             batch_X_tensor = tokenizer.batch_encode_plus(X, max_length=512, 
@@ -41,8 +48,7 @@ def train(dl: DataLoader, epochs: int = 1) -> Tuple[Type[torch.nn.Module], Type[
             model_outputs = model(torch.tensor(batch_X_tensor['input_ids']).to(device=device), 
                               attention_mask=torch.tensor(batch_X_tensor['attention_mask']).to(device=device), 
                               labels=batch_y_tensor.to(device=device))
-            
-            
+          
             model_outputs['loss'].backward()
             optimizer.step()
 
@@ -75,7 +81,6 @@ def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 16, epochs:
     # examples for batch construction, to account for data imbalance.
     weighted_sampler = get_weighted_sampler(sr_dataset)
     
-    # 
     dl = DataLoader(sr_dataset, batch_size=batch_size, sampler=weighted_sampler)
     model, tokenizer = train(dl, epochs=epochs)
 
@@ -89,14 +94,13 @@ def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 16, epochs:
         return False 
 
 class SRDataset(Dataset):
-
+    ''' A torch Dataset wrapper for screening corpora '''
     def __init__(self, titles, abstracts, labels): 
         super(SRDataset).__init__()
         self.titles = titles
         self.abstracts = abstracts
         self.labels = labels 
         self.N = len(self.titles)
-
 
     def __len__(self) -> int:
         return self.N
