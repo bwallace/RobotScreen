@@ -54,6 +54,16 @@ def train(dl: DataLoader, epochs: int = 1) -> Tuple[Type[torch.nn.Module], Type[
 
     return model, tokenizer
     
+def eval_model(val_data: DataLoader, model: Type[torch.nn.Module], tokenizer: Type[transformers.PreTrainedTokenizer]):
+    preds, labels = [], []
+    with torch.no_grad():
+        model.eval()
+        for (X, y) in val_data:
+            preds.extend(model(X))
+            labels.extend(y)
+    return (preds, labels)
+
+
 def get_weighted_sampler(dataset: Dataset) -> WeightedRandomSampler:
     # total number of positive instances
     n = dataset.labels.shape[0]
@@ -75,7 +85,13 @@ def get_weighted_sampler(dataset: Dataset) -> WeightedRandomSampler:
 
     return sampler 
 
-def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 16, epochs: int = 1) -> bool:
+def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 16, 
+                    epochs: int = 1, val_dataset: Dataset = None) -> bool:
+    '''
+    Trains a classification model on the given review dataset and dumps
+    to disk. If a val_dataset is provided, performance is evaluated on 
+    this each epoch, and the best model is saved.
+    '''
 
     # this is a sampler that assigns larger sampling weights to (rare) positive
     # examples for batch construction, to account for data imbalance.
@@ -83,6 +99,12 @@ def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 16, epochs:
     
     dl = DataLoader(sr_dataset, batch_size=batch_size, sampler=weighted_sampler)
     model, tokenizer = train(dl, epochs=epochs)
+
+    if val_dataset is not None: 
+        val_dl = DataLoader(val_dataset, batch_size=batch_size)
+        preds, labels = eval_model(val_dl, model, tokenizer)
+        import pdb; pdb.set_trace()
+
 
     out_path = os.path.join(WEIGHTS_PATH, uuid)
     try: 
