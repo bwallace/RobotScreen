@@ -40,7 +40,7 @@ def train(dl: DataLoader, epochs: int = 1) -> Tuple[Type[torch.nn.Module], Type[
     #optimizer = AdamW(model.parameters())
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
     
-    best_val = np.inf
+    best_val = -np.inf
     for epoch in range(epochs):
         print(f"on epoch {epoch}.")
         model.train()
@@ -131,6 +131,7 @@ def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 8,
     dl = DataLoader(sr_dataset, batch_size=batch_size, sampler=weighted_sampler)
     model, tokenizer = train(dl, epochs=epochs)
 
+    # TODO move to train; dump only best model
     if val_dataset is not None: 
         val_dl = DataLoader(val_dataset, batch_size=batch_size)
         preds, labels = make_preds(val_dl, model, tokenizer)

@@ -40,6 +40,6 @@ def train(csv_path:str ="example-datasets/covid-vaccines.csv", val_split:float =
     vax_dataset_tr  = SRDataset(train_titles, train_abstracts, train_labels) 
     vax_dataset_val = SRDataset(val_titles, val_abstracts, val_labels)
 
-    screening_model.train_and_save(vax_dataset_tr, "1", val_dataset=vax_dataset_val)
+    screening_model.train_and_save(vax_dataset_tr, "vaccine_model", val_dataset=vax_dataset_val, epochs=5)
 
 train()
