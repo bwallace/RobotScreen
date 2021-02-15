@@ -155,7 +155,7 @@ def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 8,
     dl = DataLoader(sr_dataset, batch_size=batch_size, sampler=weighted_sampler)
     model_state, tokenizer = train(dl, epochs=epochs, val_dataset=val_dataset)
 
-    out_path = os.path.join(WEIGHTS_PATH, uuid)
+    out_path = os.path.join(WEIGHTS_PATH, uuid+".pt")
     try: 
         print(f"dumping model weights to {out_path}...")
         torch.save(model_state, out_path)
