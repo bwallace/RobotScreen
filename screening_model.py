@@ -7,6 +7,7 @@ a model on the basis of this, and dumping it to disk.
 import os 
 from typing import Type, Tuple
 import copy 
+import collections 
 
 import numpy as np 
 
