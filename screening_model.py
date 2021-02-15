@@ -25,7 +25,7 @@ from transformers import RobertaForSequenceClassification, RobertaTokenizer, Pre
 ###
 # Globals; need to be edited for server.
 import config
-device = torch.device(config.device_str)
+
 WEIGHTS_PATH = config.weights_path_str
 ###
 
@@ -40,7 +40,7 @@ def train(dl: DataLoader, epochs: int = 3, val_dataset: Dataset = None, recall_w
     ''' Model and optimizer ''' 
     tokenizer = RobertaTokenizer.from_pretrained("allenai/biomed_roberta_base") 
     model     = RobertaForSequenceClassification.from_pretrained("allenai/biomed_roberta_base", 
-                                                                 num_labels=2).to(device=device) 
+                                                                 num_labels=2).to(device=config.device_str) 
     #for param in list(model.parameters())[-1:]:
     #    param.requires_grad = False
     
@@ -61,9 +61,9 @@ def train(dl: DataLoader, epochs: int = 3, val_dataset: Dataset = None, recall_w
                                                         add_special_tokens=True, 
                                                         pad_to_max_length=True)
             batch_y_tensor = torch.tensor(y)
-            model_outputs = model(torch.tensor(batch_X_tensor['input_ids']).to(device=device), 
-                              attention_mask=torch.tensor(batch_X_tensor['attention_mask']).to(device=device), 
-                              labels=batch_y_tensor.to(device=device))
+            model_outputs = model(torch.tensor(batch_X_tensor['input_ids']).to(device=config.device_str), 
+                              attention_mask=torch.tensor(batch_X_tensor['attention_mask']).to(device=config.device_str), 
+                              labels=batch_y_tensor.to(device=config.device_str))
           
             model_outputs['loss'].backward()
            
@@ -76,7 +76,7 @@ def train(dl: DataLoader, epochs: int = 3, val_dataset: Dataset = None, recall_w
         if val_dataset is not None: 
             # note that we use the same batchsize for val as for train
             val_dl = DataLoader(val_dataset, batch_size=dl.batch_size)
-            preds, labels = make_preds(val_dl, model, tokenizer)
+            preds, labels = make_preds(val_dl, model, tokenizer, device=config.device_str)
             results = classification_eval(preds, labels, threshold=0.5)
             # composite score; ad-hoc, I know
             score = recall_weight*results['recall'][1] + results['precision'][1]
@@ -92,7 +92,7 @@ def train(dl: DataLoader, epochs: int = 3, val_dataset: Dataset = None, recall_w
 
     return best_model_state, tokenizer
     
-def make_preds(val_data: DataLoader, model: Type[torch.nn.Module], tokenizer: Type[transformers.PreTrainedTokenizer]) -> Tuple:
+def make_preds(val_data: DataLoader, model: Type[torch.nn.Module], tokenizer: Type[transformers.PreTrainedTokenizer], device: str="cuda") -> Tuple:
     preds, labels = [], []
     with torch.no_grad():
         model.eval()
@@ -166,7 +166,7 @@ def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 8,
 
 class SRDataset(Dataset):
     ''' A torch Dataset wrapper for screening corpora '''
-    def __init__(self, titles, abstracts, labels): 
+    def __init__(self, titles, abstracts, labels=None): 
         super(SRDataset).__init__()
         self.titles = titles
         self.abstracts = abstracts
@@ -179,10 +179,14 @@ class SRDataset(Dataset):
     def __getitem__(self, index) -> tuple:
         ti = self.titles[index]
         abstract = self.abstracts[index]
-        y = self.labels[index]
 
         X = ti + " [sep] " + abstract
-        return (X, y)
+
+        if self.labels is not None: 
+            y = self.labels[index]
+            return (X, y)
+
+        return (X, 0)
 
 
 

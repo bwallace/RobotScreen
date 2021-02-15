@@ -1,3 +1,7 @@
+'''
+FLASK_ENV=development FLASK_APP=screener_app.py flask run
+'''
+
 import requests
 import json
 import time
@@ -13,6 +17,12 @@ data = [
   },
 ]
 
+
 base_url="http://127.0.0.1:5000/"
 headers = {'Content-Type': 'application/json', 'Accept':'application/json'}
+
+## for training
 requests.post(base_url+'train/1338', json=json.dumps({"labeled_data":data}), headers=headers)
+
+### for testing
+predictions = requests.post(base_url+'predict/vaccine_model', json=json.dumps({"input_citations":data}), headers=headers)
