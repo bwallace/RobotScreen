@@ -5,8 +5,8 @@ Simple module for consuming labeled abstract screening data, training
 a model on the basis of this, and dumping it to disk.
 '''
 import os 
-
 from typing import Type, Tuple
+import copy 
 
 import numpy as np 
 
@@ -28,8 +28,14 @@ device = torch.device(config.device_str)
 WEIGHTS_PATH = config.weights_path_str
 ###
 
-def train(dl: DataLoader, epochs: int = 1) -> Tuple[Type[torch.nn.Module], Type[transformers.PreTrainedTokenizer]]:
-
+def train(dl: DataLoader, epochs: int = 3, val_dataset: Dataset = None, recall_weight: int = 10) -> Tuple[collections.OrderedDict, Type[transformers.PreTrainedTokenizer]]:
+    ''' 
+    Trains and returns a model over the data in dl. If a validation Dataset is provided,
+    the model will be evaluated on this set per epoch, and the model w/the best performance
+    will be returned; note that 'best' here depends on the `recall_weight', which dictates
+    how much recall (to class `1', assumed to be includes) is weighted relative to precision.
+    '''
+    
     ''' Model and optimizer ''' 
     tokenizer = RobertaTokenizer.from_pretrained("allenai/biomed_roberta_base") 
     model     = RobertaForSequenceClassification.from_pretrained("allenai/biomed_roberta_base", 
@@ -66,7 +72,24 @@ def train(dl: DataLoader, epochs: int = 1) -> Tuple[Type[torch.nn.Module], Type[
                 print(f"avg loss for last 10 batches: {avg_loss}")
             optimizer.step()
 
-    return model, tokenizer
+        if val_dataset is not None: 
+            # note that we use the same batchsize for val as for train
+            val_dl = DataLoader(val_dataset, batch_size=dl.batch_size)
+            preds, labels = make_preds(val_dl, model, tokenizer)
+            results = classification_eval(preds, labels, threshold=0.5)
+            # composite score; ad-hoc, I know
+            score = recall_weight*results['recall'][1] + results['precision'][1]
+            results["score"] = score
+            print(results)
+
+            if score > best_val:
+                print("found new best parameter set; saving.")
+                best_model_state = copy.deepcopy(model.state_dict())
+                best_val = score
+        else:
+           best_model_state = model.state_dict()
+
+    return best_model_state, tokenizer
     
 def make_preds(val_data: DataLoader, model: Type[torch.nn.Module], tokenizer: Type[transformers.PreTrainedTokenizer]) -> Tuple:
     preds, labels = [], []
@@ -117,7 +140,7 @@ def get_weighted_sampler(dataset: Dataset) -> WeightedRandomSampler:
     return sampler 
 
 def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 8, 
-                    epochs: int = 1, val_dataset: Dataset = None) -> bool:
+                    epochs: int = 5, val_dataset: Dataset = None) -> bool:
     '''
     Trains a classification model on the given review dataset and dumps
     to disk. If a val_dataset is provided, performance is evaluated on 
@@ -129,19 +152,12 @@ def train_and_save(sr_dataset: Dataset, uuid: str, batch_size: int = 8,
     weighted_sampler = get_weighted_sampler(sr_dataset)
     
     dl = DataLoader(sr_dataset, batch_size=batch_size, sampler=weighted_sampler)
-    model, tokenizer = train(dl, epochs=epochs)
-
-    # TODO move to train; dump only best model
-    if val_dataset is not None: 
-        val_dl = DataLoader(val_dataset, batch_size=batch_size)
-        preds, labels = make_preds(val_dl, model, tokenizer)
-        results = classification_eval(preds, labels, threshold=0.5)
-        print(results) 
+    model_state, tokenizer = train(dl, epochs=epochs, val_dataset=val_dataset)
 
     out_path = os.path.join(WEIGHTS_PATH, uuid)
     try: 
         print(f"dumping model weights to {out_path}...")
-        torch.save(model.state_dict(), out_path)
+        torch.save(model_state, out_path)
         print("done.")
         return True
     except: 
