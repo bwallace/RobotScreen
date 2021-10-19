@@ -41,10 +41,7 @@ def train(dl: DataLoader, epochs: int = 3, val_dataset: Dataset = None, recall_w
     tokenizer = RobertaTokenizer.from_pretrained("allenai/biomed_roberta_base") 
     model     = RobertaForSequenceClassification.from_pretrained("allenai/biomed_roberta_base", 
                                                                  num_labels=2).to(device=config.device_str) 
-    #for param in list(model.parameters())[-1:]:
-    #    param.requires_grad = False
-    
-    #optimizer = AdamW(model.parameters())
+
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
     
     best_val = -np.inf
