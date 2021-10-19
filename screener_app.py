@@ -1,6 +1,8 @@
 import json 
 import os 
-
+# seems wrong, but for some reason manually invoking garbage collection
+# is necessary to release memory after predictions (?)
+import gc 
 import numpy as np 
 
 from flask import Flask, jsonify, request
@@ -65,5 +67,8 @@ def predict(uuid: str):
     
     dl = DataLoader(dataset, batch_size=8)
     preds, _ = screening_model.make_preds(dl, model, tokenizer, device=device)
+    
+    # oddly without this memory will not be released following the predictions
+    gc.collect()
     return {"predictions": preds}
 
