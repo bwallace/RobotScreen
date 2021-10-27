@@ -38,7 +38,7 @@ def train(uuid: str):
     
     dataset = SRDataset(titles, abstracts, np.array(labels))
 
-    success = screening_model.train_and_save(dataset, uuid, batch_size=2)
+    success = screening_model.train_and_save(dataset, uuid, batch_size=8, epochs=1)
     return f"success training? {success}" 
 
 @app.route('/predict/<uuid>', methods=['POST'])
@@ -71,4 +71,7 @@ def predict(uuid: str):
     # oddly without this memory will not be released following the predictions
     gc.collect()
     return {"predictions": preds}
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0')
 
